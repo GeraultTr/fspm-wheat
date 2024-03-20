@@ -12,6 +12,8 @@ fspmwheat/caribu_facade.py
 fspmwheat/cnwheat_facade.py
 fspmwheat/elongwheat_facade.py
 fspmwheat/farquharwheat_facade.py
+fspmwheat/fspmwheat_facade.py
+fspmwheat/fspmwheat_postprocessing.py
 fspmwheat/growthwheat_facade.py
 fspmwheat/senescwheat_facade.py
 fspmwheat/tools.py
