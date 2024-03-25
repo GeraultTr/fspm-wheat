@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 
 from dataclasses import dataclass, fields
+from genericmodel.component import Model, declare
+
 
 from alinea.adel.adel_dynamic import AdelDyn
 from alinea.adel.echap_leaf import echap_leaves
@@ -19,10 +21,30 @@ from fspmwheat import senescwheat_facade
 
 
 @dataclass
-class WheatFSPM:
+class WheatFSPM(Model):
     """
     TODO : Add description
     """
+
+    # Inputs expected from bellowground models
+    Nitrates_import: float = 0.
+    Amino_Acids_import: float = 0.
+    cytokinins: float = 0.
+
+    # State variables condidered as outputs to bellowground models
+    Total_Transpiration: float = declare(default=0., unit="mol.s-1", unit_comment="of water", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    Unloading_Sucrose: float = declare(default=0., unit="mol.s-1", unit_comment="of sucrose", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    Unloading_Amino_Acids: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    Export_cytokinins: float = declare(default=0., unit="mol.s-1", unit_comment="of cytokinins", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    
 
     def __init__(self, meteo, inputs_dataframes, 
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
@@ -76,6 +98,14 @@ class WheatFSPM:
         # read adelwheat inputs at t0
         self.adel_wheat = AdelDyn(seed=1, scene_unit='m', leaves=echap_leaves(xy_model='Soissons_byleafclass'))
         self.g = self.adel_wheat.load(dir=INPUTS_DIRPATH)
+
+        # Section specific to coupling with Root-BRIDGES
+        self.props = self.g.properties()
+        self.vertices = self.g.vertices(scale=self.g.max_scale())
+
+        for name in self.state_variables:
+            # link mtg dict to self dict
+            setattr(self, name, self.props[name])
 
         # ---------------------------------------------
         # ----- CONFIGURATION OF THE FACADES -------

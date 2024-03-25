@@ -16,5 +16,6 @@ fspmwheat/fspmwheat_facade.py
 fspmwheat/fspmwheat_postprocessing.py
 fspmwheat/growthwheat_facade.py
 fspmwheat/senescwheat_facade.py
+fspmwheat/simulation.py
 fspmwheat/tools.py
 test/test_fspmwheat.py
