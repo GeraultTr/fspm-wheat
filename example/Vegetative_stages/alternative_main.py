@@ -14,7 +14,7 @@ import statsmodels.api as sm
 
 from elongwheat import parameters as elongwheat_parameters
 from fspmwheat import cnwheat_facade
-from fspmwheat.simulation import WheatFSPM
+from fspmwheat.simulation import WheatFSPM, scenario_utility
 
 """
     main
@@ -59,8 +59,8 @@ def save_df_to_csv(df, outputs_filepath, precision):
 def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessing=True, generate_graphs=True, run_from_outputs=False, stored_times=None,
          option_static=False, show_3Dplant=True, tillers_replications=None, heterogeneous_canopy=True,
          N_fertilizations=None, PLANT_DENSITY=None, update_parameters_all_models=None,
-         INPUTS_DIRPATH='inputs', METEO_FILENAME='meteo.csv',
-         OUTPUTS_DIRPATH='outputs', POSTPROCESSING_DIRPATH='postprocessing', GRAPHS_DIRPATH='graphs', isolated_roots=False,
+         INPUTS_DIRPATH=os.path.join(os.path.dirname(__file__), 'inputs'), METEO_FILENAME='meteo.csv',
+         OUTPUTS_DIRPATH=os.path.join(os.path.dirname(__file__), 'outputs'), POSTPROCESSING_DIRPATH='postprocessing', GRAPHS_DIRPATH='graphs', isolated_roots=False,
          cnwheat_roots=True):
     """
     Run a simulation of fspmwheat with coupling to several models
@@ -112,6 +112,13 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
     # number of seconds in 1 hour
     HOUR_TO_SECOND_CONVERSION_FACTOR = 3600
 
+    # Name of the CSV files which describes the initial state of the system
+    AXES_INITIAL_STATE_FILENAME = 'axes_initial_state.csv'
+    ORGANS_INITIAL_STATE_FILENAME = 'organs_initial_state.csv'
+    HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv'
+    ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv'
+    SOILS_INITIAL_STATE_FILENAME = 'soils_initial_state.csv'
+
     # Name of the CSV files which will contain the outputs of the model
     AXES_OUTPUTS_FILENAME = 'axes_outputs.csv'
     ORGANS_OUTPUTS_FILENAME = 'organs_outputs.csv'
@@ -130,11 +137,11 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
 
         previous_outputs_dataframes = {}
 
-        for initial_state_filename, outputs_filename, index_columns in ((wheat_fspm.AXES_INITIAL_STATE_FILENAME, AXES_OUTPUTS_FILENAME, AXES_INDEX_COLUMNS),
-                                                                        (wheat_fspm.ORGANS_INITIAL_STATE_FILENAME, ORGANS_OUTPUTS_FILENAME, ORGANS_INDEX_COLUMNS),
-                                                                        (wheat_fspm.HIDDENZONES_INITIAL_STATE_FILENAME, HIDDENZONES_OUTPUTS_FILENAME, HIDDENZONES_INDEX_COLUMNS),
-                                                                        (wheat_fspm.ELEMENTS_INITIAL_STATE_FILENAME, ELEMENTS_OUTPUTS_FILENAME, ELEMENTS_INDEX_COLUMNS),
-                                                                        (wheat_fspm.SOILS_INITIAL_STATE_FILENAME, SOILS_OUTPUTS_FILENAME, SOILS_INDEX_COLUMNS)):
+        for initial_state_filename, outputs_filename, index_columns in ((AXES_INITIAL_STATE_FILENAME, AXES_OUTPUTS_FILENAME, AXES_INDEX_COLUMNS),
+                                                                        (ORGANS_INITIAL_STATE_FILENAME, ORGANS_OUTPUTS_FILENAME, ORGANS_INDEX_COLUMNS),
+                                                                        (HIDDENZONES_INITIAL_STATE_FILENAME, HIDDENZONES_OUTPUTS_FILENAME, HIDDENZONES_INDEX_COLUMNS),
+                                                                        (ELEMENTS_INITIAL_STATE_FILENAME, ELEMENTS_OUTPUTS_FILENAME, ELEMENTS_INDEX_COLUMNS),
+                                                                        (SOILS_INITIAL_STATE_FILENAME, SOILS_OUTPUTS_FILENAME, SOILS_INDEX_COLUMNS)):
 
             previous_outputs_dataframe = pd.read_csv(os.path.join(OUTPUTS_DIRPATH, outputs_filename))
             # Convert NaN to None
@@ -148,7 +155,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
                 last_t_step = max(previous_outputs_dataframes[outputs_filename]['t'])
                 new_start_time = last_t_step + 1
 
-            if initial_state_filename == wheat_fspm.ELEMENTS_INITIAL_STATE_FILENAME:
+            if initial_state_filename == ELEMENTS_INITIAL_STATE_FILENAME:
                 elements_previous_outputs = previous_outputs_dataframes[outputs_filename]
                 new_initial_state = elements_previous_outputs[~elements_previous_outputs.is_over.isnull()]
             else:
@@ -158,7 +165,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
 
         # Make sure boolean columns have either type bool or float
         bool_columns = ['is_over', 'is_growing', 'leaf_is_emerged', 'internode_is_visible', 'leaf_is_growing', 'internode_is_growing', 'leaf_is_remobilizing', 'internode_is_remobilizing']
-        for df in [inputs_dataframes[wheat_fspm.ELEMENTS_INITIAL_STATE_FILENAME], inputs_dataframes[wheat_fspm.HIDDENZONES_INITIAL_STATE_FILENAME]]:
+        for df in [inputs_dataframes[ELEMENTS_INITIAL_STATE_FILENAME], inputs_dataframes[HIDDENZONES_INITIAL_STATE_FILENAME]]:
             for cln in bool_columns:
                 if cln in df.keys():
                     df[cln].replace(to_replace='False', value=0.0, inplace=True)
@@ -166,19 +173,16 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
                     df[cln] = pd.to_numeric(df[cln])
     else:
         new_start_time = -1
-        for inputs_filename in (wheat_fspm.AXES_INITIAL_STATE_FILENAME,
-                                wheat_fspm.ORGANS_INITIAL_STATE_FILENAME,
-                                wheat_fspm.HIDDENZONES_INITIAL_STATE_FILENAME,
-                                wheat_fspm.ELEMENTS_INITIAL_STATE_FILENAME,
-                                wheat_fspm.SOILS_INITIAL_STATE_FILENAME):
+        for inputs_filename in (AXES_INITIAL_STATE_FILENAME,
+                                ORGANS_INITIAL_STATE_FILENAME,
+                                HIDDENZONES_INITIAL_STATE_FILENAME,
+                                ELEMENTS_INITIAL_STATE_FILENAME,
+                                SOILS_INITIAL_STATE_FILENAME):
             inputs_dataframe = pd.read_csv(os.path.join(INPUTS_DIRPATH, inputs_filename))
             inputs_dataframes[inputs_filename] = inputs_dataframe.where(inputs_dataframe.notnull(), None)
 
     # Start time of the simulation
     START_TIME = max(0, new_start_time)
-
-    # Name of the CSV files which contains the meteo data
-    meteo = pd.read_csv(os.path.join(INPUTS_DIRPATH, METEO_FILENAME), index_col='t')
 
     # -- OUTPUTS CONFIGURATION --
 
@@ -199,9 +203,8 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
     SOILS_POSTPROCESSING_FILENAME = 'soils_postprocessing.csv'
 
     # INITIALIZATION OF THE MODEL
-    wheat_fspm = WheatFSPM(meteo=meteo, inputs_dataframes=inputs_dataframes, INPUTS_DIRPATH=INPUTS_DIRPATH, option_static=option_static, show_3Dplant=show_3Dplant, tillers_replications=tillers_replications,
-                           heterogeneous_canopy=heterogeneous_canopy, N_fertilizations=N_fertilizations, update_parameters_all_models=update_parameters_all_models, 
-                           isolated_roots=isolated_roots, cnwheat_roots=cnwheat_roots)
+    scenario = scenario_utility(INPUTS_DIRPATH=INPUTS_DIRPATH, OUTPUTS_DIRPATH=OUTPUTS_DIRPATH)
+    wheat_fspm = WheatFSPM(**scenario)
 
     # ---------------------------------------------
     # -----      RUN OF THE SIMULATION      -------
@@ -213,7 +216,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
             current_time_of_the_system = time.time()
             for t_caribu in range(START_TIME, SIMULATION_LENGTH, wheat_fspm.SENESCWHEAT_TIMESTEP):
                 # Run the model step wise
-                wheat_fspm(t_caribu=t_caribu)
+                wheat_fspm()
 
             execution_time = int(time.time() - current_time_of_the_system)
             print('\n' 'Simulation run in {}'.format(str(datetime.timedelta(seconds=execution_time))))
@@ -719,7 +722,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
 
 
 if __name__ == '__main__':
-    main(2500, forced_start_time=0, run_simu=False, run_postprocessing=True, generate_graphs=True, run_from_outputs=False,
+    main(2500, forced_start_time=0, run_simu=True, run_postprocessing=False, generate_graphs=True, run_from_outputs=False,
          show_3Dplant=False,
          option_static=False, tillers_replications={'T1': 0.5, 'T2': 0.5, 'T3': 0.5, 'T4': 0.5},
          heterogeneous_canopy=True, N_fertilizations={2016: 357143, 2520: 1000000},

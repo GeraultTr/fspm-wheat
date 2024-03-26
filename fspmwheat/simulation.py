@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from dataclasses import dataclass, fields
-from genericmodel.component import Model, declare
+from metafspm.component import Model, declare
 
 
 from alinea.adel.adel_dynamic import AdelDyn
@@ -27,9 +27,15 @@ class WheatFSPM(Model):
     """
 
     # Inputs expected from bellowground models
-    Nitrates_import: float = 0.
-    Amino_Acids_import: float = 0.
-    cytokinins: float = 0.
+    Nitrates_import: float = declare(default=0., unit="mol.s-1", unit_comment="of nitrate", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
+    Amino_Acids_import: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
+    cytokinins: float = declare(default=0., unit="mol.s-1", unit_comment="Adim", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
 
     # State variables condidered as outputs to bellowground models
     Total_Transpiration: float = declare(default=0., unit="mol.s-1", unit_comment="of water", 
@@ -46,18 +52,19 @@ class WheatFSPM(Model):
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
     
 
-    def __init__(self, meteo, inputs_dataframes, 
+    def __init__(self, meteo, inputs_dataframes,
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
                  AXES_INITIAL_STATE_FILENAME = 'axes_initial_state.csv', update_parameters_all_models = None, HOUR_TO_SECOND_CONVERSION_FACTOR = 3600, 
                  ORGANS_INITIAL_STATE_FILENAME = 'organs_initial_state.csv', SOILS_INITIAL_STATE_FILENAME = 'soils_initial_state.csv', INPUTS_DIRPATH='inputs', 
                  PLANT_DENSITY=None, tillers_replications=None, stored_times = None, N_fertilizations=None, heterogeneous_canopy=True, show_3Dplant = False, option_static = False, 
-                 cnwheat_roots=True, UPDATE_SHARED_DF=False, 
+                 isolated_roots = False, cnwheat_roots=True, UPDATE_SHARED_DF=False, START_TIME = 0,
                  CARIBU_TIMESTEP = 4, FARQUHARWHEAT_TIMESTEP = 1, ELONGWHEAT_TIMESTEP = 1, GROWTHWHEAT_TIMESTEP = 1, CNWHEAT_TIMESTEP = 1, SENESCWHEAT_TIMESTEP = 1):
         
         # SELF STORAGE FOR LOOP PARAMETERS
         self.meteo = meteo
 
         # time steps
+        self.time_step_in_hours = START_TIME
         self.CARIBU_TIMESTEP = CARIBU_TIMESTEP
         self.SENESCWHEAT_TIMESTEP = SENESCWHEAT_TIMESTEP
         self.FARQUHARWHEAT_TIMESTEP = FARQUHARWHEAT_TIMESTEP
@@ -103,10 +110,6 @@ class WheatFSPM(Model):
         self.props = self.g.properties()
         self.vertices = self.g.vertices(scale=self.g.max_scale())
 
-        for name in self.state_variables:
-            # link mtg dict to self dict
-            setattr(self, name, self.props[name])
-
         # ---------------------------------------------
         # ----- CONFIGURATION OF THE FACADES -------
         # ---------------------------------------------
@@ -131,7 +134,7 @@ class WheatFSPM(Model):
             update_parameters_elongwheat = None
 
         # Facade initialisation
-        self.elongwheat_facade = elongwheat_facade.ElongWheatFacade(self.g,
+        self.elongwheat_facade_ = elongwheat_facade.ElongWheatFacade(self.g,
                                                                 ELONGWHEAT_TIMESTEP * HOUR_TO_SECOND_CONVERSION_FACTOR,
                                                                 elongwheat_axes_initial_state,
                                                                 elongwheat_hiddenzones_initial_state,
@@ -298,21 +301,26 @@ class WheatFSPM(Model):
         if show_3Dplant:
             self.adel_wheat.plot(self.g)
 
-    def __call__(self, t_caribu):
-        # run Caribu
-        PARi = self.meteo.loc[t_caribu, ['PARi']].iloc[0]
-        DOY = self.meteo.loc[t_caribu, ['DOY']].iloc[0]
-        hour = self.meteo.loc[t_caribu, ['hour']].iloc[0]
-        PARi_next_hours = self.meteo.loc[range(t_caribu, t_caribu + self.CARIBU_TIMESTEP), ['PARi']].sum().values[0]
+        for name in self.state_variables:
+            # link mtg dict to self dict
+            setattr(self, name, self.props[name])
 
-        if (t_caribu % self.CARIBU_TIMESTEP == 0) and (PARi_next_hours > 0):
+
+    def __call__(self):
+        # run Caribu
+        PARi = self.meteo.loc[self.time_step_in_hours, ['PARi']].iloc[0]
+        DOY = self.meteo.loc[self.time_step_in_hours, ['DOY']].iloc[0]
+        hour = self.meteo.loc[self.time_step_in_hours, ['hour']].iloc[0]
+        PARi_next_hours = self.meteo.loc[range(self.time_step_in_hours, self.time_step_in_hours + self.CARIBU_TIMESTEP), ['PARi']].sum().values[0]
+
+        if (self.time_step_in_hours % self.CARIBU_TIMESTEP == 0) and (PARi_next_hours > 0):
             run_caribu = True
         else:
             run_caribu = False
 
         self.caribu_facade_.run(run_caribu, energy=PARi, DOY=DOY, hourTU=hour, latitude=48.85, sun_sky_option='sky', heterogeneous_canopy=self.heterogeneous_canopy, plant_density=self.PLANT_DENSITY[1])
 
-        for t_senescwheat in range(t_caribu, t_caribu + self.SENESCWHEAT_TIMESTEP, self.SENESCWHEAT_TIMESTEP):
+        for t_senescwheat in range(self.time_step_in_hours, self.time_step_in_hours + self.SENESCWHEAT_TIMESTEP, self.SENESCWHEAT_TIMESTEP):
             # run SenescWheat
             self.senescwheat_facade_.run()
 
@@ -374,3 +382,120 @@ class WheatFSPM(Model):
                                 self.hiddenzones_all_data_list.append(hiddenzones_outputs)
                                 self.elements_all_data_list.append(elements_outputs)
                                 self.soils_all_data_list.append(soils_outputs)
+
+        self.time_step_in_hours += self.SENESCWHEAT_TIMESTEP
+
+
+def scenario_utility(INPUTS_DIRPATH = "inputs", OUTPUTS_DIRPATH = "outputs", METEO_FILENAME = "meteo_Ljutovac2002.csv", PLANT_DENSITY = {1:250},
+                     forced_start_time = 0, tillers_replications={'T1': 0.5, 'T2': 0.5, 'T3': 0.5, 'T4': 0.5}, N_fertilizations = {2016: 357143, 2520: 1000000},
+                     stored_times = None, option_static = False, show_3Dplant = False, run_from_outputs = False, heterogeneous_canopy = True, update_parameters_all_models = None,
+                     isolated_roots = False, cnwheat_roots = True):
+    scenario = {}
+
+    ### DIRS ###
+
+    scenario["INPUTS_DIRPATH"] = INPUTS_DIRPATH
+    
+    # Save the outputs with a full scan of the MTG at each time step (or at selected time steps)
+    UPDATE_SHARED_DF = False
+    if stored_times is None:
+        stored_times = 'all'
+    if not (stored_times == 'all' or type(stored_times) == list):
+        print('stored_times should be either \'all\', a list or an empty list.')
+        raise
+
+    scenario["stored_times"] = stored_times
+
+    ### METEO PARAMETER ###
+    scenario["meteo"] = pd.read_csv(os.path.join(INPUTS_DIRPATH, METEO_FILENAME), index_col='t')
+
+    AXES_INDEX_COLUMNS = ['t', 'plant', 'axis']
+    ELEMENTS_INDEX_COLUMNS = ['t', 'plant', 'axis', 'metamer', 'organ', 'element']
+    HIDDENZONES_INDEX_COLUMNS = ['t', 'plant', 'axis', 'metamer']
+    ORGANS_INDEX_COLUMNS = ['t', 'plant', 'axis', 'organ']
+    SOILS_INDEX_COLUMNS = ['t', 'plant', 'axis']
+
+    # Name of the CSV files which describes the initial state of the system
+    AXES_INITIAL_STATE_FILENAME = 'axes_initial_state.csv'
+    ORGANS_INITIAL_STATE_FILENAME = 'organs_initial_state.csv'
+    HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv'
+    ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv'
+    SOILS_INITIAL_STATE_FILENAME = 'soils_initial_state.csv'
+
+    # Name of the CSV files which will contain the outputs of the model
+    AXES_OUTPUTS_FILENAME = 'axes_outputs.csv'
+    ORGANS_OUTPUTS_FILENAME = 'organs_outputs.csv'
+    HIDDENZONES_OUTPUTS_FILENAME = 'hiddenzones_outputs.csv'
+    ELEMENTS_OUTPUTS_FILENAME = 'elements_outputs.csv'
+    SOILS_OUTPUTS_FILENAME = 'soils_outputs.csv'
+
+    ### INPUT DATAFRAMES PARAMETER ###
+    # Read the inputs from CSV files and create inputs dataframes
+    inputs_dataframes = {}
+    if run_from_outputs:
+
+        previous_outputs_dataframes = {}
+
+        for initial_state_filename, outputs_filename, index_columns in ((AXES_INITIAL_STATE_FILENAME, AXES_OUTPUTS_FILENAME, AXES_INDEX_COLUMNS),
+                                                                        (ORGANS_INITIAL_STATE_FILENAME, ORGANS_OUTPUTS_FILENAME, ORGANS_INDEX_COLUMNS),
+                                                                        (HIDDENZONES_INITIAL_STATE_FILENAME, HIDDENZONES_OUTPUTS_FILENAME, HIDDENZONES_INDEX_COLUMNS),
+                                                                        (ELEMENTS_INITIAL_STATE_FILENAME, ELEMENTS_OUTPUTS_FILENAME, ELEMENTS_INDEX_COLUMNS),
+                                                                        (SOILS_INITIAL_STATE_FILENAME, SOILS_OUTPUTS_FILENAME, SOILS_INDEX_COLUMNS)):
+
+            previous_outputs_dataframe = pd.read_csv(os.path.join(OUTPUTS_DIRPATH, outputs_filename))
+            # Convert NaN to None
+            previous_outputs_dataframes[outputs_filename] = previous_outputs_dataframe.where(previous_outputs_dataframe.notnull(), None)
+
+            assert 't' in previous_outputs_dataframes[outputs_filename].columns
+            if forced_start_time > 0:
+                new_start_time = forced_start_time + 1
+                previous_outputs_dataframes[outputs_filename] = previous_outputs_dataframes[outputs_filename][previous_outputs_dataframes[outputs_filename]['t'] <= forced_start_time]
+            else:
+                last_t_step = max(previous_outputs_dataframes[outputs_filename]['t'])
+                new_start_time = last_t_step + 1
+
+            if initial_state_filename == ELEMENTS_INITIAL_STATE_FILENAME:
+                elements_previous_outputs = previous_outputs_dataframes[outputs_filename]
+                new_initial_state = elements_previous_outputs[~elements_previous_outputs.is_over.isnull()]
+            else:
+                new_initial_state = previous_outputs_dataframes[outputs_filename]
+            idx = new_initial_state.groupby([col for col in index_columns if col != 't'])['t'].transform(max) == new_initial_state['t']
+            inputs_dataframes[initial_state_filename] = new_initial_state[idx].drop(['t'], axis=1)
+
+        # Make sure boolean columns have either type bool or float
+        bool_columns = ['is_over', 'is_growing', 'leaf_is_emerged', 'internode_is_visible', 'leaf_is_growing', 'internode_is_growing', 'leaf_is_remobilizing', 'internode_is_remobilizing']
+        for df in [inputs_dataframes[ELEMENTS_INITIAL_STATE_FILENAME], inputs_dataframes[HIDDENZONES_INITIAL_STATE_FILENAME]]:
+            for cln in bool_columns:
+                if cln in df.keys():
+                    df[cln].replace(to_replace='False', value=0.0, inplace=True)
+                    df[cln].replace(to_replace='True', value=1.0, inplace=True)
+                    df[cln] = pd.to_numeric(df[cln])
+    else:
+        new_start_time = -1
+        for inputs_filename in (AXES_INITIAL_STATE_FILENAME,
+                                ORGANS_INITIAL_STATE_FILENAME,
+                                HIDDENZONES_INITIAL_STATE_FILENAME,
+                                ELEMENTS_INITIAL_STATE_FILENAME,
+                                SOILS_INITIAL_STATE_FILENAME):
+            inputs_dataframe = pd.read_csv(os.path.join(INPUTS_DIRPATH, inputs_filename))
+            inputs_dataframes[inputs_filename] = inputs_dataframe.where(inputs_dataframe.notnull(), None)
+
+    # Start time of the simulation
+    START_TIME = max(0, new_start_time)
+    scenario["START_TIME"] = START_TIME
+    
+    scenario["inputs_dataframes"] = inputs_dataframes
+
+    ### OPTIONS ###
+    scenario["PLANT_DENSITY"] = PLANT_DENSITY
+    scenario["option_static"] = option_static
+    scenario["show_3Dplant"] = show_3Dplant
+    scenario["tillers_replications"] = tillers_replications
+    scenario["heterogeneous_canopy"] = heterogeneous_canopy
+    scenario["N_fertilizations"] = N_fertilizations
+    scenario["update_parameters_all_models"] = update_parameters_all_models
+    scenario["isolated_roots"] = isolated_roots
+    scenario["cnwheat_roots"] = cnwheat_roots
+
+
+    return scenario
