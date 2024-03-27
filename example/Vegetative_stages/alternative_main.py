@@ -217,6 +217,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
             for t_caribu in range(START_TIME, SIMULATION_LENGTH, wheat_fspm.SENESCWHEAT_TIMESTEP):
                 # Run the model step wise
                 wheat_fspm()
+                print(wheat_fspm.g.properties()["N_content_total"])
 
             execution_time = int(time.time() - current_time_of_the_system)
             print('\n' 'Simulation run in {}'.format(str(datetime.timedelta(seconds=execution_time))))
@@ -244,7 +245,7 @@ def main(simulation_length, forced_start_time=0, run_simu=True, run_postprocessi
     # ---------------------------------------------
     # -----      POST-PROCESSING      -------
     # ---------------------------------------------
-
+    
     if run_postprocessing:
         # Retrieve outputs dataframes from precedent simulation run
         if not run_simu:

@@ -27,15 +27,21 @@ class WheatFSPM(Model):
     """
 
     # Inputs expected from bellowground models
-    Nitrates_import: float = declare(default=0., unit="mol.s-1", unit_comment="of nitrate", 
+    Export_Nitrates: float = declare(default=0., unit="mol.s-1", unit_comment="of nitrate", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
-    Amino_Acids_import: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
+    Export_Amino_Acids: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
-    cytokinins: float = declare(default=0., unit="mol.s-1", unit_comment="Adim", 
+    sucrose: float = declare(default=0., unit="mol.s-1", unit_comment="Adim", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_carbon", state_variable_type="extensive", edit_by="user")
+    cytokinins: float = declare(default=0., unit="Adim", unit_comment="", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
+    mstruct: float = declare(default=0., unit="g", unit_comment="", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_growth", state_variable_type="extensive", edit_by="user")
 
     # State variables condidered as outputs to bellowground models
     Total_Transpiration: float = declare(default=0., unit="mol.s-1", unit_comment="of water", 
@@ -105,7 +111,7 @@ class WheatFSPM(Model):
         # read adelwheat inputs at t0
         self.adel_wheat = AdelDyn(seed=1, scene_unit='m', leaves=echap_leaves(xy_model='Soissons_byleafclass'))
         self.g = self.adel_wheat.load(dir=INPUTS_DIRPATH)
-
+        
         # Section specific to coupling with Root-BRIDGES
         self.props = self.g.properties()
         self.vertices = self.g.vertices(scale=self.g.max_scale())
@@ -301,10 +307,21 @@ class WheatFSPM(Model):
         if show_3Dplant:
             self.adel_wheat.plot(self.g)
 
+        self.root_props = self.g.get_vertex_property(2)["roots"]
+        print(self.root_props)
+        # Link this specific data structure to self for variables exchange
+        # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
-            # link mtg dict to self dict
-            setattr(self, name, self.props[name])
+            if name != "Total_Transpiration":
+                setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.root_props['{name}'])])")))
+            else:
+                setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.g.get_vertex_property(2)['{name}'])])")))
 
+        for name in self.inputs:
+            # Note : here we set a setter as it will be overwritten by other models
+            setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.root_props['{name}'])])"), 
+                                                  eval(f"lambda self, value: self.root_props.__setitem__('{name}', value)")))
+            
 
     def __call__(self):
         # run Caribu
