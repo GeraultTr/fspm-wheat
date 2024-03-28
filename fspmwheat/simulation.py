@@ -308,7 +308,7 @@ class WheatFSPM(Model):
             self.adel_wheat.plot(self.g)
 
         self.root_props = self.g.get_vertex_property(2)["roots"]
-        
+
         # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
         # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
@@ -317,6 +317,12 @@ class WheatFSPM(Model):
             else:
                 setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.g.get_vertex_property(2)['{name}'])])")))
             
+
+        # TODO : Temporary
+        self.root_props["Unloading_Sucrose"] = 0.
+        self.root_props["Unloading_Amino_Acids"] = 0.
+        self.g.properties()["Total_Transpiration"][2] = 0.
+        
 
     def sync_inputs_with_mtg_data(self):
         for name in self.inputs:
@@ -378,7 +384,7 @@ class WheatFSPM(Model):
                         self.growthwheat_facade_.run()
 
                         for t_cnwheat in range(t_growthwheat, t_growthwheat + self.GROWTHWHEAT_TIMESTEP, self.CNWHEAT_TIMESTEP):
-                            print('t cnwheat is {}'.format(t_cnwheat))
+                            #print('t cnwheat is {}'.format(t_cnwheat))
 
                             # N fertilization if any
                             if self.N_fertilizations is not None and len(self.N_fertilizations) > 0:
