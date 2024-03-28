@@ -41,7 +41,7 @@ class WheatFSPM(Model):
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
     mstruct: float = declare(default=0., unit="g", unit_comment="", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
-                                        variable_type="input", by="root_growth", state_variable_type="extensive", edit_by="user")
+                                        variable_type="input", by="root_carbon", state_variable_type="extensive", edit_by="user")
 
     # State variables condidered as outputs to bellowground models
     Total_Transpiration: float = declare(default=0., unit="mol.s-1", unit_comment="of water", 
@@ -308,22 +308,24 @@ class WheatFSPM(Model):
             self.adel_wheat.plot(self.g)
 
         self.root_props = self.g.get_vertex_property(2)["roots"]
-        print(self.root_props)
-        # Link this specific data structure to self for variables exchange
+        
+        # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
         # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
             if name != "Total_Transpiration":
                 setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.root_props['{name}'])])")))
             else:
                 setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.g.get_vertex_property(2)['{name}'])])")))
-
-        for name in self.inputs:
-            # Note : here we set a setter as it will be overwritten by other models
-            setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.root_props['{name}'])])"), 
-                                                  eval(f"lambda self, value: self.root_props.__setitem__('{name}', value)")))
             
 
+    def sync_inputs_with_mtg_data(self):
+        for name in self.inputs:
+            self.root_props[name] = getattr(self, name)[1]
+
     def __call__(self):
+        # SPECIFIC TO COUPLING
+        self.sync_inputs_with_mtg_data()
+
         # run Caribu
         PARi = self.meteo.loc[self.time_step_in_hours, ['PARi']].iloc[0]
         DOY = self.meteo.loc[self.time_step_in_hours, ['DOY']].iloc[0]
