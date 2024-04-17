@@ -27,16 +27,16 @@ class WheatFSPM(Model):
     """
 
     # Inputs expected from bellowground models
-    Export_Nitrates: float = declare(default=0., unit="mol.s-1", unit_comment="of nitrate", 
+    Export_Nitrates: float = declare(default=0., unit="umol.h-1", unit_comment="of nitrate",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
-    Export_Amino_Acids: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
+    Export_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
-    sucrose: float = declare(default=0., unit="mol.s-1", unit_comment="Adim", 
+    sucrose: float = declare(default=0., unit="umol of C", unit_comment="amount in equivalent C",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_carbon", state_variable_type="extensive", edit_by="user")
-    cytokinins: float = declare(default=0., unit="Adim", unit_comment="", 
+    cytokinins: float = declare(default=0., unit="AU", unit_comment="",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
     mstruct: float = declare(default=0., unit="g", unit_comment="", 
@@ -44,19 +44,18 @@ class WheatFSPM(Model):
                                         variable_type="input", by="root_carbon", state_variable_type="extensive", edit_by="user")
 
     # State variables condidered as outputs to bellowground models
-    Total_Transpiration: float = declare(default=0., unit="mol.s-1", unit_comment="of water", 
+    Total_Transpiration: float = declare(default=0., unit="mmol.s-1", unit_comment="of water", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Unloading_Sucrose: float = declare(default=0., unit="mol.s-1", unit_comment="of sucrose", 
+    Unloading_Sucrose: float = declare(default=0., unit="umol.h-1", unit_comment="of sucrose", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Unloading_Amino_Acids: float = declare(default=0., unit="mol.s-1", unit_comment="of amino acids", 
+    Unloading_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Export_cytokinins: float = declare(default=0., unit="mol.s-1", unit_comment="of cytokinins", 
+    Export_cytokinins: float = declare(default=0., unit="AU.s-1", unit_comment="of cytokinins", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    
 
     def __init__(self, meteo, inputs_dataframes,
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
@@ -327,10 +326,13 @@ class WheatFSPM(Model):
     def sync_inputs_with_mtg_data(self):
         for name in self.inputs:
             self.root_props[name] = getattr(self, name)[1]
+        
 
     def __call__(self):
         # SPECIFIC TO COUPLING
         self.sync_inputs_with_mtg_data()
+
+        print((self.g.get_vertex_property(2)["mstruct"] - self.g.get_vertex_property(2)["roots"]["mstruct"])/self.g.get_vertex_property(2)["mstruct"])
 
         # run Caribu
         PARi = self.meteo.loc[self.time_step_in_hours, ['PARi']].iloc[0]
