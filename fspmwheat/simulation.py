@@ -53,7 +53,7 @@ class WheatFSPM(Model):
     Unloading_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Export_cytokinins: float = declare(default=0., unit="AU.s-1", unit_comment="of cytokinins", 
+    Export_cytokinins: float = declare(default=0., unit="AU.h-1", unit_comment="of cytokinins",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
 
@@ -321,18 +321,14 @@ class WheatFSPM(Model):
         self.root_props["Unloading_Sucrose"] = 0.
         self.root_props["Unloading_Amino_Acids"] = 0.
         self.g.properties()["Total_Transpiration"][2] = 0.
-        
 
     def sync_inputs_with_mtg_data(self):
         for name in self.inputs:
             self.root_props[name] = getattr(self, name)[1]
-        
 
     def __call__(self):
-        # SPECIFIC TO COUPLING
+        # SPECIFIC TO COUPLING, syncs the shoot mtg variables with bellowground models
         self.sync_inputs_with_mtg_data()
-
-        print((self.g.get_vertex_property(2)["mstruct"] - self.g.get_vertex_property(2)["roots"]["mstruct"])/self.g.get_vertex_property(2)["mstruct"])
 
         # run Caribu
         PARi = self.meteo.loc[self.time_step_in_hours, ['PARi']].iloc[0]
