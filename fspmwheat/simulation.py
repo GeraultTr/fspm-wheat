@@ -47,7 +47,7 @@ class WheatFSPM(Model):
     Total_Transpiration: float = declare(default=0., unit="mmol.s-1", unit_comment="of water", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Unloading_Sucrose: float = declare(default=0., unit="umol.h-1", unit_comment="of sucrose", 
+    Unloading_Sucrose: float = declare(default=0., unit="umol.h-1", unit_comment="of equivalent C mol? sucrose",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
     Unloading_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids", 
@@ -318,8 +318,8 @@ class WheatFSPM(Model):
             
 
         # TODO : Temporary
-        self.root_props["Unloading_Sucrose"] = 0.
-        self.root_props["Unloading_Amino_Acids"] = 0.
+        self.root_props["Unloading_Sucrose"] = 30.
+        self.root_props["Unloading_Amino_Acids"] = 1.
         self.g.properties()["Total_Transpiration"][2] = 0.
 
     def sync_inputs_with_mtg_data(self):
