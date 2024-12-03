@@ -57,7 +57,7 @@ class WheatFSPM(Model):
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
 
-    def __init__(self, meteo, inputs_dataframes,
+    def __init__(self, root_mtg, meteo, inputs_dataframes,
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
                  AXES_INITIAL_STATE_FILENAME = 'axes_initial_state.csv', update_parameters_all_models = None, HOUR_TO_SECOND_CONVERSION_FACTOR = 3600, 
                  ORGANS_INITIAL_STATE_FILENAME = 'organs_initial_state.csv', SOILS_INITIAL_STATE_FILENAME = 'soils_initial_state.csv', INPUTS_DIRPATH='inputs', 
@@ -112,8 +112,12 @@ class WheatFSPM(Model):
         self.g = self.adel_wheat.load(dir=INPUTS_DIRPATH)
         
         # Section specific to coupling with Root-BRIDGES
-        self.props = self.g.properties()
-        self.vertices = self.g.vertices(scale=self.g.max_scale())
+        self.shoot_props = self.g.properties()
+
+        self.props = root_mtg.properties()
+        self.vertices = root_mtg.vertices(scale=root_mtg.max_scale())
+
+        self.link_self_to_mtg()
 
         # ---------------------------------------------
         # ----- CONFIGURATION OF THE FACADES -------
@@ -306,29 +310,33 @@ class WheatFSPM(Model):
         if show_3Dplant:
             self.adel_wheat.plot(self.g)
 
-        self.root_props = self.g.get_vertex_property(2)["roots"]
+        self.cn_wheat_root_props = self.g.get_vertex_property(2)["roots"]
 
+        # TODO : Temporary
+        self.cn_wheat_root_props["Unloading_Sucrose"] = 30.
+        self.cn_wheat_root_props["Unloading_Amino_Acids"] = 1.
+        self.g.properties()["Total_Transpiration"][2] = 0.
+
+        self.sync_shoot_outputs_with_root_mtg()
+
+    def sync_shoot_inputs_with_shoot_mtg(self):
+        for name in self.inputs:
+            self.cn_wheat_root_props[name] = self.props[name][1]
+
+    def sync_shoot_outputs_with_root_mtg(self):
         # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
         # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
             if name != "Total_Transpiration":
-                setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.root_props['{name}'])])")))
+                self.props[name].update({1: self.cn_wheat_root_props[name]})
             else:
-                setattr(WheatFSPM, name, property(eval(f"lambda self:dict([(1, self.g.get_vertex_property(2)['{name}'])])")))
-            
+                self.props[name].update({1: self.g.get_vertex_property(2)[name]})
 
-        # TODO : Temporary
-        self.root_props["Unloading_Sucrose"] = 30.
-        self.root_props["Unloading_Amino_Acids"] = 1.
-        self.g.properties()["Total_Transpiration"][2] = 0.
-
-    def sync_inputs_with_mtg_data(self):
-        for name in self.inputs:
-            self.root_props[name] = getattr(self, name)[1]
 
     def __call__(self):
         # SPECIFIC TO COUPLING, syncs the shoot mtg variables with bellowground models
-        self.sync_inputs_with_mtg_data()
+        self.pull_available_inputs()
+        self.sync_shoot_inputs_with_shoot_mtg()
 
         # run Caribu
         PARi = self.meteo.loc[self.time_step_in_hours, ['PARi']].iloc[0]
@@ -407,6 +415,9 @@ class WheatFSPM(Model):
                                 self.soils_all_data_list.append(soils_outputs)
 
         self.time_step_in_hours += self.SENESCWHEAT_TIMESTEP
+
+        self.sync_shoot_outputs_with_root_mtg()
+
 
 
 def scenario_utility(INPUTS_DIRPATH = "inputs", OUTPUTS_DIRPATH = "outputs", METEO_FILENAME = "meteo_Ljutovac2002.csv", PLANT_DENSITY = {1:250},
