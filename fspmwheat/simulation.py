@@ -18,13 +18,15 @@ from fspmwheat import fspmwheat_facade
 from fspmwheat import growthwheat_facade
 from fspmwheat import senescwheat_facade
 
-
+family = "shoot"
 
 @dataclass
 class WheatFSPM(Model):
     """
     TODO : Add description
     """
+
+    family = family
 
     # Inputs expected from bellowground models
     Export_Nitrates: float = declare(default=0., unit="umol.h-1", unit_comment="of nitrate",
@@ -309,7 +311,7 @@ class WheatFSPM(Model):
         self.adel_wheat.update_geometry(self.g)
         if show_3Dplant:
             self.adel_wheat.plot(self.g)
-
+        
         self.cn_wheat_root_props = self.g.get_vertex_property(2)["roots"]
 
         # TODO : Temporary
@@ -381,7 +383,7 @@ class WheatFSPM(Model):
                     self.elongwheat_facade_.run(Tair, Tsoil, option_static=self.option_static)
 
                     # Update geometry
-                    self.adel_wheat.update_geometry(self.g)
+                    # self.adel_wheat.update_geometry(self.g)
                     if self.show_3Dplant:
                         self.adel_wheat.plot(self.g)
 

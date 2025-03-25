@@ -118,6 +118,13 @@ class ElongWheatFacade(object):
                 mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
                 # if mtg_axis_label != 'MS':
                 #     continue
+                if isinstance(self._shared_mtg.label(mtg_axis_vid), str):
+                    mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
+                elif isinstance(self._shared_mtg.label(mtg_axis_vid), bytes):
+                    mtg_axis_label = self._shared_mtg.label(mtg_axis_vid).decode('UTF-8')
+                else:
+                    raise TypeError('Axis label type not recognized')
+
                 mtg_axis_properties = self._shared_mtg.get_vertex_property(mtg_axis_vid)
 
                 axis_id = (mtg_plant_index, mtg_axis_label)
@@ -269,7 +276,15 @@ class ElongWheatFacade(object):
 
             # Axis scale
             for mtg_axis_vid in self._shared_mtg.components_iter(mtg_plant_vid):
-                mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
+                # mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
+                # axis_id = (mtg_plant_index, mtg_axis_label)
+                if isinstance(self._shared_mtg.label(mtg_axis_vid), str):
+                    mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
+                elif isinstance(self._shared_mtg.label(mtg_axis_vid), bytes):
+                    mtg_axis_label = self._shared_mtg.label(mtg_axis_vid).decode('UTF-8')
+                else:
+                    raise TypeError('Axis label type not recognized')
+
                 axis_id = (mtg_plant_index, mtg_axis_label)
                 if axis_id in all_elongwheat_axes_data_dict:
                     elongwheat_axis_data_dict = all_elongwheat_axes_data_dict[axis_id]
