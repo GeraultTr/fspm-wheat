@@ -14,7 +14,7 @@ import statsmodels.api as sm
 
 from elongwheat import parameters as elongwheat_parameters
 from fspmwheat import cnwheat_facade
-from fspmwheat.simulation import WheatFSPM, scenario_utility
+from fspmwheat.cnwheat_composite import WheatFSPM, scenario_utility
 
 """
     main
