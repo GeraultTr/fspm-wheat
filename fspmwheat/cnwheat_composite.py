@@ -56,6 +56,9 @@ class WheatFSPM(Model):
     Export_cytokinins: float = declare(default=0., unit="AU.h-1", unit_comment="of cytokinins",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    synchronize_adventitious_emergence: int = declare(default=-1, unit="", unit_comment="", description="3 level boolean commanding next non emerged adventitious, if different from -1, blocks thermal time based emergence delay, if 0 waits for next, >=1 emerge next.", 
+                                                    min_value="", max_value="", value_comment="", references="", DOI="", 
+                                                    variable_type="state_variable", by="model_shoot", state_variable_type="descriptor", edit_by="user")
 
     def __init__(self, root_mtg, meteo, inputs_dataframes,
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
@@ -320,6 +323,7 @@ class WheatFSPM(Model):
         self.g.properties()["Total_Transpiration"][2] = 0.
 
         self.sync_shoot_outputs_with_root_mtg()
+        self.tillers_to_emerge = [self.g.node(v).label.decode() for v in self.g.vertices(scale=2) if "T" in str(self.g.node(v).label) and ".0" not in str(self.g.node(v).label)]
 
     def sync_shoot_inputs_with_shoot_mtg(self):
         for name in self.inputs:
@@ -329,10 +333,38 @@ class WheatFSPM(Model):
         # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
         # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
-            if name != "Total_Transpiration":
-                self.props[name].update({1: self.cn_wheat_root_props[name]})
-            else:
+            if name == "Total_Transpiration":
                 self.props[name].update({1: self.g.get_vertex_property(2)[name]})
+
+            elif name == "synchronize_adventitious_emergence":
+                axes = self.g.vertices(scale=2)
+                for v in axes:
+                    n = self.g.node(v)
+                    
+                    if isinstance(n.label, bytes):
+                        axis_label = n.label.decode()
+                    else:
+                        axis_label = str(n.label)
+                    if "T" in axis_label and ".0" not in axis_label:
+                        initiated, emerged = False, False
+
+                        subcomponents = self.g.components_at_scale(v, scale=3)
+                        for sv in subcomponents:
+                            sn = self.g.node(sv)
+                            if hasattr(sn, 'hiddenzone'):
+                                hz = sn.hiddenzone
+                                if hz is not None:
+                                    if hz["leaf_is_emerged"]:
+                                        emerged = True
+                        
+                        if emerged and axis_label in self.tillers_to_emerge:
+                            self.tillers_to_emerge.remove(axis_label)
+                            self.props[name].update({1: 2})
+                            
+            else:
+                self.props[name].update({1: self.cn_wheat_root_props[name]})
+
+        
 
 
     def __call__(self):
