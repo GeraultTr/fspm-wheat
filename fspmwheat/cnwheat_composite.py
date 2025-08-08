@@ -56,9 +56,18 @@ class WheatFSPM(Model):
     Export_cytokinins: float = declare(default=0., unit="AU.h-1", unit_comment="of cytokinins",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    synchronize_adventitious_emergence: int = declare(default=-1, unit="", unit_comment="", description="3 level boolean commanding next non emerged adventitious, if different from -1, blocks thermal time based emergence delay, if 0 waits for next, >=1 emerge next.", 
+    adventitious_to_emerge: list = declare(default=None, unit="", unit_comment="", description="List of adventitous roots delays before emergence starting from current time step, length of list indicates the number to emerge", 
                                                     min_value="", max_value="", value_comment="", references="", DOI="", 
                                                     variable_type="state_variable", by="model_shoot", state_variable_type="descriptor", edit_by="user")
+    
+    # PARAMETERS
+    synchronize_adventitious_emergence: bool = declare(default=True, unit="", unit_comment="", description="boolean to choose option where root nodal emergence depend on shoot leaf emergence dynamic", 
+                                                    min_value="", max_value="", value_comment="", references="", DOI="", 
+                                                    variable_type="parameter", by="model_shoot", state_variable_type="descriptor", edit_by="user")
+    nodal_emergence_delay_since_leaf_emerged: float = declare(default=(180 / 20) * 24 * 3600, unit="s", unit_comment="equivalent at 20°C", description="Emergence delay for nodal primordium to emerge since leaf emerged on this node", 
+                                                    min_value="", max_value="", value_comment="", references="Klepper 1984", DOI="", 
+                                                    variable_type="parameter", by="model_shoot", state_variable_type="descriptor", edit_by="user")
+
 
     def __init__(self, root_mtg, meteo, inputs_dataframes,
                  HIDDENZONES_INITIAL_STATE_FILENAME = 'hiddenzones_initial_state.csv', ELEMENTS_INITIAL_STATE_FILENAME = 'elements_initial_state.csv', 
@@ -322,8 +331,37 @@ class WheatFSPM(Model):
         self.cn_wheat_root_props["Unloading_Amino_Acids"] = 1.
         self.g.properties()["Total_Transpiration"][2] = 0.
 
+        
+        if self.synchronize_adventitious_emergence:
+            # Specific initialization for already emerged leaves at the begining of the simulation
+            self.main_stem_vid = [v for v in self.g.vertices(scale=2) if "MS" in str(self.g.node(v).label)][0]
+            self.already_emerged_leaves = []
+            hiddenzones = self.g.vertices(scale=3)
+            for v in hiddenzones:
+                n = self.g.node(v)
+                if hasattr(n, "hiddenzone"):
+                    if n.hiddenzone is not None:
+                        hz = n.hiddenzone
+                        if hz["leaf_is_emerged"]:
+                            self.already_emerged_leaves.append(v)
+            nodal_emergence_delays = []
+            for vid in self.g.components_at_scale(self.main_stem_vid, scale=5):
+                n = self.g.node(vid)
+                if "Leaf" in n.label:
+                    remaining_time_to_emergence = max(0, self.nodal_emergence_delay_since_leaf_emerged - (n.age / 20) * 24 * 3600)
+                    nodal_emergence_delays += [remaining_time_to_emergence,
+                                               remaining_time_to_emergence]
+                    # Third likely nodal on this node
+                    if np.random.random() < 0.8:
+                        nodal_emergence_delays.append(remaining_time_to_emergence + (100 / 20) * 24 * 3600 )
+                    # Fourth less likely nodal on this node
+                    elif np.random.random() < 0.2:
+                        nodal_emergence_delays.append(remaining_time_to_emergence + (100 / 20) * 24 * 3600 )
+                    
+            self.props["adventitious_to_emerge"].update({1: nodal_emergence_delays})
+
         self.sync_shoot_outputs_with_root_mtg()
-        self.tillers_to_emerge = [self.g.node(v).label.decode() for v in self.g.vertices(scale=2) if "T" in str(self.g.node(v).label) and ".0" not in str(self.g.node(v).label)]
+        
 
     def sync_shoot_inputs_with_shoot_mtg(self):
         for name in self.inputs:
@@ -336,30 +374,29 @@ class WheatFSPM(Model):
             if name == "Total_Transpiration":
                 self.props[name].update({1: self.g.get_vertex_property(2)[name]})
 
-            elif name == "synchronize_adventitious_emergence":
-                axes = self.g.vertices(scale=2)
-                for v in axes:
+            elif name == "adventitious_to_emerge" and self.synchronize_adventitious_emergence:
+                hiddenzones = self.g.vertices(scale=3)
+                main_stem_hz = self.g.components_at_scale(self.main_stem_vid, scale=3)
+                nodal_emergence_delays = [] # Several per time step are possible!
+                for v in hiddenzones:
                     n = self.g.node(v)
                     
-                    if isinstance(n.label, bytes):
-                        axis_label = n.label.decode()
-                    else:
-                        axis_label = str(n.label)
-                    if "T" in axis_label and ".0" not in axis_label:
-                        initiated, emerged = False, False
+                    if hasattr(n, "hiddenzone"):
+                        if n.hiddenzone is not None:
+                            hz = n.hiddenzone
+                            if hz["leaf_is_emerged"] and v not in self.already_emerged_leaves:
+                                nodal_emergence_delays += [self.nodal_emergence_delay_since_leaf_emerged,
+                                                        self.nodal_emergence_delay_since_leaf_emerged]
+                                if v in main_stem_hz:
+                                    # Third likely nodal on this node
+                                    if np.random.random() < 0.8:
+                                        nodal_emergence_delays.append(self.nodal_emergence_delay_since_leaf_emerged + (100 / 20) * 24 * 3600 )
+                                    # Fourth less likely nodal on this node
+                                    elif np.random.random() < 0.2:
+                                        nodal_emergence_delays.append(self.nodal_emergence_delay_since_leaf_emerged + (100 / 20) * 24 * 3600 )
 
-                        subcomponents = self.g.components_at_scale(v, scale=3)
-                        for sv in subcomponents:
-                            sn = self.g.node(sv)
-                            if hasattr(sn, 'hiddenzone'):
-                                hz = sn.hiddenzone
-                                if hz is not None:
-                                    if hz["leaf_is_emerged"]:
-                                        emerged = True
-                        
-                        if emerged and axis_label in self.tillers_to_emerge:
-                            self.tillers_to_emerge.remove(axis_label)
-                            self.props[name].update({1: 2})
+                                self.props[name].update({1: nodal_emergence_delays})
+                                self.already_emerged_leaves.append(v)
                             
             else:
                 self.props[name].update({1: self.cn_wheat_root_props[name]})
