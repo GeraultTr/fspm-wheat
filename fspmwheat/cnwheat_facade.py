@@ -9,6 +9,7 @@ from fspmwheat import tools
 
 import numpy as np
 import math
+from scipy.sparse import lil_matrix
 
 """
     fspmwheat.cnwheat_facade
@@ -131,13 +132,14 @@ class CNWheatFacade(object):
         Run the model and update the MTG and the dataframes shared between all models.
 
         :param update_shared_df:
-        :param float Tair: air temperature (°C)
-        :param float Tsoil: soil temperature (°C)
+        :param float Tair: air temperature (ï¿½C)
+        :param float Tsoil: soil temperature (ï¿½C)
         :param dict [str, float] tillers_replications: a dictionary with tiller id as key, and weight of replication as value.
         :param bool update_shared_df: if 'True', update the shared dataframes at this time step.
         """
 
         self._initialize_model(Tair=Tair, Tsoil=Tsoil, tillers_replications=tillers_replications)
+        self._initialize_indices_and_sparcity()
         self._simulation.run()
         self._update_shared_MTG()
 
@@ -209,8 +211,8 @@ class CNWheatFacade(object):
         """
         Initialize the inputs of the model from the MTG shared between all models and the soils.
 
-        :param float Tair: air temperature (°C)
-        :param float Tsoil: soil temperature (°C)
+        :param float Tair: air temperature (ï¿½C)
+        :param float Tsoil: soil temperature (ï¿½C)
         :param dict [str, float] tillers_replications: a dictionary with tiller id as key, and weight of replication as value.
         """
 
@@ -388,6 +390,98 @@ class CNWheatFacade(object):
                 self.population.plants.append(cnwheat_plant)
 
         self._simulation.initialize(self.population, self.soils, Tair=Tair, Tsoil=Tsoil)
+        
+
+    def _initialize_indices_and_sparcity(self):
+        n = len(self._simulation.initial_conditions)
+        S = lil_matrix((n, n), dtype=bool)
+        # diagonal always present
+        S.setdiag(True)
+
+        icm = self._simulation.initial_conditions_mapping
+        for plant in self._simulation.population.plants:
+            for axis in plant.axes:
+                axis._phloem_contributors = [axis.roots]
+                for variable in ('sucrose', 'amino_acids'):
+                    setattr(axis.phloem, f"_i_{variable}", icm[axis.phloem][variable])
+
+                # Phloem indices
+                i_ph_suc = axis.phloem._i_sucrose
+                i_ph_aa = axis.phloem._i_amino_acids
+
+                # Collect per-axis element/HZ columns we must connect
+                E_suc_cols, E_aa_cols = [], []
+                HZ_suc_cols, HZ_aa_cols = [], []
+
+                for phytomer in axis.phytomers:
+                    hiddenzone = phytomer.hiddenzone
+                    if phytomer.hiddenzone is not None:
+                        # if hiddenzone.mstruct > 0:
+                        hz_idxs = []
+                        for variable in ('sucrose', 'fructan', 'amino_acids', 'proteins'):
+                            setattr(hiddenzone, f"_i_{variable}", icm[hiddenzone][variable])
+                            hz_idxs.append(icm[hiddenzone][variable])
+                        for i in hz_idxs:
+                            S.rows[i].extend(hz_idxs); S.data[i].extend([True]*len(hz_idxs))
+                        # hidden zone depends on phloem unloading
+                        for i in hz_idxs:
+                            S[i, i_ph_suc] = True; S[i, i_ph_aa] = True
+                        HZ_suc_cols.append(icm[hiddenzone]['sucrose'])
+                        HZ_aa_cols.append(icm[hiddenzone]['amino_acids'])
+
+                        axis._phloem_contributors.append(hiddenzone)
+                    
+                    for organ in (phytomer.chaff, phytomer.peduncle, phytomer.lamina, phytomer.internode, phytomer.sheath):
+                            if organ is not None:
+                                for element in (organ.exposed_element, organ.enclosed_element):
+                                    # if element is not None and element.green_area > 0.25E-6 and element.mstruct > 0.0:
+                                    if element is not None:
+                                        elt_idxs = []
+                                        for variable in ('starch', 'sucrose', 'triosesP', 'fructan', 'nitrates', 'amino_acids', 'proteins', 'cytokinins'):
+                                            setattr(element, f"_i_{variable}", icm[element][variable])
+                                            elt_idxs.append(icm[element][variable])
+                                        for i in elt_idxs:
+                                            S.rows[i].extend(elt_idxs); S.data[i].extend([True]*len(elt_idxs))
+                                            # element loads/unloads vs phloem
+                                            S[i, i_ph_suc] = True; S[i, i_ph_aa] = True
+
+                                        i_e_suc = icm[element]['sucrose']
+                                        i_e_aa = icm[element]['amino_acids']
+                                        E_suc_cols.append(i_e_suc)
+                                        E_aa_cols.append(i_e_aa)
+
+                                        # NEW: element rows depend on HZ pools (growing/export case)
+                                        if hiddenzone is not None:
+                                            S[i_e_suc, icm[hiddenzone]['sucrose']]       = True
+                                            S[i_e_aa,  icm[hiddenzone]['amino_acids']]   = True
+                                        
+                                        if not element.is_growing:
+                                            axis._phloem_contributors.append(element)
+
+                # Couplings that are easy to forget (make these dense):
+                #    a) HZ rows depend on element loadings â†’ HZ rows depend on element sucrose/AA
+                for i in HZ_suc_cols:
+                    S.rows[i].extend(E_suc_cols); S.data[i].extend([True]*len(E_suc_cols))
+                for i in HZ_aa_cols:
+                    S.rows[i].extend(E_aa_cols); S.data[i].extend([True]*len(E_aa_cols))
+
+                #    b) Phloem rows depend on HZ unloading AND element loading
+                S.rows[i_ph_suc].extend(E_suc_cols + HZ_suc_cols); S.data[i_ph_suc].extend([True]*(len(E_suc_cols) + len(HZ_suc_cols)))
+                S.rows[i_ph_aa].extend(E_aa_cols  + HZ_aa_cols); S.data[i_ph_aa].extend([True]*(len(E_aa_cols) + len(HZ_aa_cols)))
+
+                if axis.grains is not None:
+                    grain_idxs = []
+                    for variable in ('structure','starch','proteins','age_from_flowering'):
+                        setattr(axis.grains, f"_i_{variable}", icm[axis.grains][variable])
+                        grain_idxs.append(icm[axis.grains][variable])
+                    for i in grain_idxs:
+                        S.rows[i].extend(grain_idxs); S.data[i].extend([True]*len(grain_idxs))
+                        S[i, i_ph_suc] = True; S[i, i_ph_aa] = True
+                    # grains contribute to phloem via AA (if any)
+                    S[i_ph_aa, icm[axis.grains]['proteins']] = True  # harmless over-approx
+
+        self._simulation._jac_sparsity_shoot = S.tocsr()
+
 
     def _update_shared_MTG(self):
         """

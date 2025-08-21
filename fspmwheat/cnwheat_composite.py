@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import pandas as pd
+import time
 
 from dataclasses import dataclass, fields
 from openalea.metafspm.component import Model, declare
@@ -19,6 +20,7 @@ from fspmwheat import growthwheat_facade
 from fspmwheat import senescwheat_facade
 
 
+debug = False
 
 @dataclass
 class WheatFSPM(Model):
@@ -425,7 +427,9 @@ class WheatFSPM(Model):
 
         for t_senescwheat in range(self.time_step_in_hours, self.time_step_in_hours + self.SENESCWHEAT_TIMESTEP, self.SENESCWHEAT_TIMESTEP):
             # run SenescWheat
+            t1 = time.time()
             self.senescwheat_facade_.run()
+            if debug: print("senescwheat took :", time.time() - t1)
 
             # Test for dead plant # TODO: adapt in case of multiple plants
             if not self.shared_elements_inputs_outputs_df.empty and \
@@ -445,12 +449,16 @@ class WheatFSPM(Model):
                 Ta, ambient_CO2, RH, Ur = self.meteo.loc[t_farquharwheat, ['air_temperature', 'ambient_CO2', 'humidity', 'Wind']]
 
                 # run FarquharWheat
+                t1 = time.time()
                 self.farquharwheat_facade_.run(Ta, ambient_CO2, RH, Ur)
+                if debug: print("farquharwheat took :", time.time() - t1)
 
                 for t_elongwheat in range(t_farquharwheat, t_farquharwheat + self.FARQUHARWHEAT_TIMESTEP, self.ELONGWHEAT_TIMESTEP):
                     # run ElongWheat
                     Tair, Tsoil = self.meteo.loc[t_elongwheat, ['air_temperature', 'soil_temperature']]
+                    t1 = time.time()
                     self.elongwheat_facade_.run(Tair, Tsoil, option_static=self.option_static)
+                    if debug: print("elongwheat took :", time.time() - t1)
 
                     # Update geometry
                     # self.adel_wheat.update_geometry(self.g)
@@ -459,7 +467,9 @@ class WheatFSPM(Model):
 
                     for t_growthwheat in range(t_elongwheat, t_elongwheat + self.ELONGWHEAT_TIMESTEP, self.GROWTHWHEAT_TIMESTEP):
                         # run GrowthWheat
+                        t1 = time.time()
                         self.growthwheat_facade_.run()
+                        if debug: print("growthwheat took :", time.time() - t1)
 
                         for t_cnwheat in range(t_growthwheat, t_growthwheat + self.GROWTHWHEAT_TIMESTEP, self.CNWHEAT_TIMESTEP):
                             #print('t cnwheat is {}'.format(t_cnwheat))
@@ -473,7 +483,9 @@ class WheatFSPM(Model):
                                 # run CNWheat
                                 Tair = self.meteo.loc[t_elongwheat, 'air_temperature']
                                 Tsoil = self.meteo.loc[t_elongwheat, 'soil_temperature']
+                                t1 = time.time()
                                 self.cnwheat_facade_.run(Tair, Tsoil, self.tillers_replications)
+                                if debug: print("cnwheat took :", time.time() - t1)
 
                             # append outputs at current step to global lists
                             if (self.stored_times == 'all') or (t_cnwheat in self.stored_times):
