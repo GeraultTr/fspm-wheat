@@ -461,7 +461,7 @@ class WheatFSPM(Model):
                     if debug: print("elongwheat took :", time.time() - t1)
 
                     # Update geometry
-                    # self.adel_wheat.update_geometry(self.g)
+                    self.adel_wheat.update_geometry(self.g)
                     if self.show_3Dplant:
                         self.adel_wheat.plot(self.g)
 

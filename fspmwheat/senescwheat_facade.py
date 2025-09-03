@@ -63,7 +63,7 @@ class SenescWheatFacade(object):
         """
 
         self._shared_mtg = shared_mtg  #: the MTG shared between all models
-
+        self.cnwheat_roots = cnwheat_roots
         self._simulation = simulation.Simulation(delta_t=delta_t, update_parameters=update_parameters, cnwheat_roots=cnwheat_roots)  #: the simulator to use to run the model
 
         all_senescwheat_inputs_dict = converter.from_dataframes(model_roots_inputs_df, model_axes_inputs_df, model_elements_inputs_df)
@@ -177,18 +177,20 @@ class SenescWheatFacade(object):
                 mtg_axis_label = self._shared_mtg.label(mtg_axis_vid)
                 if mtg_axis_label != 'MS':
                     continue
+                
+                if self.cnwheat_roots:
+                    # update the axis property in the MTG
+                    axis_id = (mtg_plant_index, mtg_axis_label)
+                    mtg_axis_properties = self._shared_mtg.get_vertex_property(mtg_axis_vid)
+                    mtg_axis_properties.update(senescwheat_axes_data_dict.get(axis_id, []))
+                    # update the roots in the MTG
+                    if axis_id not in senescwheat_roots_data_dict:
+                        continue
+                    if 'roots' not in self._shared_mtg.get_vertex_property(mtg_axis_vid):
+                        self._shared_mtg.property('roots')[mtg_axis_vid] = {}
+                    mtg_roots_properties = self._shared_mtg.get_vertex_property(mtg_axis_vid)['roots']
+                    mtg_roots_properties.update(senescwheat_roots_data_dict[axis_id])
 
-                # update the axis property in the MTG
-                axis_id = (mtg_plant_index, mtg_axis_label)
-                mtg_axis_properties = self._shared_mtg.get_vertex_property(mtg_axis_vid)
-                mtg_axis_properties.update(senescwheat_axes_data_dict.get(axis_id, []))
-                # update the roots in the MTG
-                if axis_id not in senescwheat_roots_data_dict:
-                    continue
-                if 'roots' not in self._shared_mtg.get_vertex_property(mtg_axis_vid):
-                    self._shared_mtg.property('roots')[mtg_axis_vid] = {}
-                mtg_roots_properties = self._shared_mtg.get_vertex_property(mtg_axis_vid)['roots']
-                mtg_roots_properties.update(senescwheat_roots_data_dict[axis_id])
                 for mtg_metamer_vid in self._shared_mtg.components_iter(mtg_axis_vid):
                     mtg_metamer_index = int(self._shared_mtg.index(mtg_metamer_vid))
                     for mtg_organ_vid in self._shared_mtg.components_iter(mtg_metamer_vid):
@@ -207,7 +209,7 @@ class SenescWheatFacade(object):
                                 self._shared_mtg.property(senescwheat_element_data_name)[mtg_element_vid] = senescwheat_element_data_value
                                 # Temporaire avant de trouver une solution pour :
                                 # 1) piloter la senescence des feuilles par green_area plutot que par senesced_length,
-                                # 2) updater les organes à partir des éléments et non l'inverse.
+                                # 2) updater les organes ï¿½ partir des ï¿½lï¿½ments et non l'inverse.
                                 if senescwheat_element_data_name == 'senesced_length_element' and mtg_element_label in ['LeafElement1', 'StemElement']:
                                     self._shared_mtg.property('senesced_length')[mtg_organ_vid] = np.nan_to_num(self._shared_mtg.property(senescwheat_element_data_name).get(mtg_element_vid, 0.))
 

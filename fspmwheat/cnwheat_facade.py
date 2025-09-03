@@ -409,33 +409,36 @@ class CNWheatFacade(object):
                 i_ph_suc = axis.phloem._i_sucrose
                 i_ph_aa = axis.phloem._i_amino_acids
 
+                # phloem sucrose row depends on phloem sucrose (diag already) and MAY depend on phloem AA via unloading logic, over-approx for safety, could be removed
+                S[i_ph_suc, i_ph_aa] = True
+                S[i_ph_aa,  i_ph_suc] = True
+
                 # Collect per-axis element/HZ columns we must connect
                 E_suc_cols, E_aa_cols = [], []
                 HZ_suc_cols, HZ_aa_cols = [], []
 
                 for phytomer in axis.phytomers:
                     hiddenzone = phytomer.hiddenzone
-                    if phytomer.hiddenzone is not None:
-                        # if hiddenzone.mstruct > 0:
-                        hz_idxs = []
-                        for variable in ('sucrose', 'fructan', 'amino_acids', 'proteins'):
-                            setattr(hiddenzone, f"_i_{variable}", icm[hiddenzone][variable])
-                            hz_idxs.append(icm[hiddenzone][variable])
-                        for i in hz_idxs:
-                            S.rows[i].extend(hz_idxs); S.data[i].extend([True]*len(hz_idxs))
-                        # hidden zone depends on phloem unloading
-                        for i in hz_idxs:
-                            S[i, i_ph_suc] = True; S[i, i_ph_aa] = True
-                        HZ_suc_cols.append(icm[hiddenzone]['sucrose'])
-                        HZ_aa_cols.append(icm[hiddenzone]['amino_acids'])
+                    if hiddenzone is not None:
+                        if hiddenzone.mstruct > 0:
+                            hz_idxs = []
+                            for variable in ('sucrose', 'fructan', 'amino_acids', 'proteins'):
+                                setattr(hiddenzone, f"_i_{variable}", icm[hiddenzone][variable])
+                                hz_idxs.append(icm[hiddenzone][variable])
+                            for i in hz_idxs:
+                                S.rows[i].extend(hz_idxs); S.data[i].extend([True]*len(hz_idxs))
+                                # hidden zone depends on phloem unloading
+                                S[i, i_ph_suc] = True; S[i, i_ph_aa] = True
+                            HZ_suc_cols.append(icm[hiddenzone]['sucrose'])
+                            HZ_aa_cols.append(icm[hiddenzone]['amino_acids'])
 
-                        axis._phloem_contributors.append(hiddenzone)
+                            axis._phloem_contributors.append(hiddenzone)
                     
                     for organ in (phytomer.chaff, phytomer.peduncle, phytomer.lamina, phytomer.internode, phytomer.sheath):
                             if organ is not None:
                                 for element in (organ.exposed_element, organ.enclosed_element):
-                                    # if element is not None and element.green_area > 0.25E-6 and element.mstruct > 0.0:
-                                    if element is not None:
+                                    if element is not None and element.green_area > 0.25E-6 and element.mstruct > 0.0: # Ignored here as element could change status during solver iteration
+                                    # if element is not None:
                                         elt_idxs = []
                                         for variable in ('starch', 'sucrose', 'triosesP', 'fructan', 'nitrates', 'amino_acids', 'proteins', 'cytokinins'):
                                             setattr(element, f"_i_{variable}", icm[element][variable])
@@ -447,14 +450,17 @@ class CNWheatFacade(object):
 
                                         i_e_suc = icm[element]['sucrose']
                                         i_e_aa = icm[element]['amino_acids']
+                                        # Since roots are not computed by CN-Wheat here, nitrates and cytokinins act as constants
+                                        # i_e_nit = icm[element]['nitrates']
+                                        # i_e_cyt = icm[element]['cytokinins']
                                         E_suc_cols.append(i_e_suc)
                                         E_aa_cols.append(i_e_aa)
 
-                                        # NEW: element rows depend on HZ pools (growing/export case)
+                                        # Element rows depend on HZ pools (growing/export case)
                                         if hiddenzone is not None:
                                             S[i_e_suc, icm[hiddenzone]['sucrose']]       = True
                                             S[i_e_aa,  icm[hiddenzone]['amino_acids']]   = True
-                                        
+
                                         if not element.is_growing:
                                             axis._phloem_contributors.append(element)
 
@@ -469,6 +475,7 @@ class CNWheatFacade(object):
                 S.rows[i_ph_suc].extend(E_suc_cols + HZ_suc_cols); S.data[i_ph_suc].extend([True]*(len(E_suc_cols) + len(HZ_suc_cols)))
                 S.rows[i_ph_aa].extend(E_aa_cols  + HZ_aa_cols); S.data[i_ph_aa].extend([True]*(len(E_aa_cols) + len(HZ_aa_cols)))
 
+                # NOTE: likely not to happen in Wheat-BRIDGES simulations for now
                 if axis.grains is not None:
                     grain_idxs = []
                     for variable in ('structure','starch','proteins','age_from_flowering'):
