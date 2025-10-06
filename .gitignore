@@ -2,7 +2,9 @@
 
 # Ignore Python cache dirs
 __pycache__/
+*__pycache__/
 *.py[cod]
+*.pyc
 
 # Ignore egg-info
 *.egg-info/

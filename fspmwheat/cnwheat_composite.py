@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 import time
+import logging
 
 from dataclasses import dataclass, fields
 from openalea.metafspm.component import Model, declare
@@ -19,6 +20,8 @@ from fspmwheat import fspmwheat_facade
 from fspmwheat import growthwheat_facade
 from fspmwheat import senescwheat_facade
 
+
+logger_output = logging.getLogger("Simulation_Logger")
 
 debug = False
 
@@ -429,6 +432,14 @@ class WheatFSPM(Model):
             # run SenescWheat
             t1 = time.time()
             self.senescwheat_facade_.run()
+            # if (1, 'MS', 5, 'internode', 'HiddenElement') not in self.senescwheat_facade_._simulation.outputs["elements"].keys():
+            #     logger_output.info("Post SW, Internode not found")
+            hidelt = self.g.node(80)
+            if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                logger_output.info(f"Post SW, Internode element has no proper length in MTG : {hidelt.length}")
+            hidorg = self.g.node(70)
+            if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                logger_output.info(f"Post SW, Internode organ has no proper length in MTG : {hidorg.length}")
             if debug: print("senescwheat took :", time.time() - t1)
 
             # Test for dead plant # TODO: adapt in case of multiple plants
@@ -451,6 +462,14 @@ class WheatFSPM(Model):
                 # run FarquharWheat
                 t1 = time.time()
                 self.farquharwheat_facade_.run(Ta, ambient_CO2, RH, Ur)
+                # if (1, 'MS', 5, 'internode', 'HiddenElement') not in self.farquharwheat_facade_._simulation.outputs.keys():
+                #     logger_output.info("Post FW, Internode not found")
+                hidelt = self.g.node(80)
+                if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                    logger_output.info(f"Post FW, Internode element has no proper length in MTG : {hidelt.length}")
+                hidorg = self.g.node(70)
+                if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                    logger_output.info(f"Post FW, Internode organ has no proper length in MTG : {hidorg.length}")
                 if debug: print("farquharwheat took :", time.time() - t1)
 
                 for t_elongwheat in range(t_farquharwheat, t_farquharwheat + self.FARQUHARWHEAT_TIMESTEP, self.ELONGWHEAT_TIMESTEP):
@@ -458,18 +477,39 @@ class WheatFSPM(Model):
                     Tair, Tsoil = self.meteo.loc[t_elongwheat, ['air_temperature', 'soil_temperature']]
                     t1 = time.time()
                     self.elongwheat_facade_.run(Tair, Tsoil, option_static=self.option_static)
+                    # if (1, 'MS', 5, 'internode', 'HiddenElement') not in self.elongwheat_facade_._simulation.outputs["elements"].keys():
+                    #     logger_output.info("Post EW, Internode not found")
+                    hidelt = self.g.node(80)
+                    if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                        logger_output.info(f"Post EW, Internode element has no proper length in MTG : {hidelt.length}")
+                    hidorg = self.g.node(70)
+                    if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                        logger_output.info(f"Post EW, Internode organ has no proper length in MTG : {hidorg.length}")
                     if debug: print("elongwheat took :", time.time() - t1)
 
                     # Update geometry
                     self.adel_wheat.update_geometry(self.g)
                     if self.show_3Dplant:
                         self.adel_wheat.plot(self.g)
+                    hidelt = self.g.node(80)
+                    if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                        logger_output.info(f"Post AW, Internode element has no proper length in MTG : {hidelt.length}")
+                    hidorg = self.g.node(70)
+                    if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                        logger_output.info(f"Post AW, Internode organ has no proper length in MTG : {hidorg.length}")
 
                     for t_growthwheat in range(t_elongwheat, t_elongwheat + self.ELONGWHEAT_TIMESTEP, self.GROWTHWHEAT_TIMESTEP):
                         # run GrowthWheat
                         t1 = time.time()
                         self.growthwheat_facade_.run()
-                        if debug: print("growthwheat took :", time.time() - t1)
+                        # if (1, 'MS', 5, 'internode', 'HiddenElement') not in self.growthwheat_facade_._simulation.outputs["elements"].keys():
+                        #     logger_output.info("Post GW, Internode not found")
+                        hidelt = self.g.node(80)
+                        if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                            logger_output.info(f"Post GW, Internode element has no proper length in MTG : {hidelt.length}")
+                        hidorg = self.g.node(70)
+                        if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                            logger_output.info(f"Post GW, Internode organ has no proper length in MTG : {hidorg.length}")
 
                         for t_cnwheat in range(t_growthwheat, t_growthwheat + self.GROWTHWHEAT_TIMESTEP, self.CNWHEAT_TIMESTEP):
                             #print('t cnwheat is {}'.format(t_cnwheat))
@@ -486,6 +526,12 @@ class WheatFSPM(Model):
                                 t1 = time.time()
                                 self.cnwheat_facade_.run(Tair, Tsoil, self.tillers_replications)
                                 if debug: print("cnwheat took :", time.time() - t1)
+                                hidelt = self.g.node(80)
+                                if (hidelt.length is None) or (np.isnan(hidelt.length)) or (np.isinf(hidelt.length)) or (hidelt.length <= 0.):
+                                    logger_output.info(f"Post CNW, Internode element has no proper length in MTG : {hidelt.length}")
+                                hidorg = self.g.node(70)
+                                if (hidorg.length is None) or (np.isnan(hidorg.length)) or (np.isinf(hidorg.length)) or (hidorg.length <= 0.):
+                                    logger_output.info(f"Post CNW, Internode organ has no proper length in MTG : {hidorg.length}")
 
                             # append outputs at current step to global lists
                             if (self.stored_times == 'all') or (t_cnwheat in self.stored_times):

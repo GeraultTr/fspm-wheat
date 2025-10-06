@@ -1,5 +1,7 @@
 # -*- coding: latin-1 -*-
 import numpy as np
+import logging
+logger_output = logging.getLogger("Simulation_Logger")
 
 from elongwheat import converter, simulation
 from fspmwheat import tools
@@ -190,6 +192,8 @@ class ElongWheatFacade(object):
                         mtg_organ_label = self._shared_mtg.label(mtg_organ_vid)
                         mtg_organ_properties = self._shared_mtg.get_vertex_property(mtg_organ_vid)
                         if np.nan_to_num(self._shared_mtg.property('length').get(mtg_organ_vid, 0)) == 0:
+                            if np.isnan(self._shared_mtg.property('length').get(mtg_organ_vid, 0)):
+                                logger_output.info(f"Organ {mtg_organ_label} vid {mtg_organ_vid} has nan length")
                             continue
                         if mtg_organ_label == 'blade':
                             elongwheat_hiddenzone_data_from_mtg_organs_data['lamina_Lmax'] = mtg_organ_properties['shape_mature_length']
@@ -197,6 +201,8 @@ class ElongWheatFacade(object):
                         # Element scale
                         for mtg_element_vid in self._shared_mtg.components_iter(mtg_organ_vid):
                             mtg_element_label = self._shared_mtg.label(mtg_element_vid)
+                            # if (mtg_plant_index, mtg_axis_label, mtg_metamer_index, mtg_organ_label, mtg_element_label) == (1, 'MS', 5, 'internode', 'HiddenElement'):
+                            #     logger_output.info(f"Found problematic element, {mtg_element_vid}, {mtg_organ_vid}")
                             mtg_element_properties = self._shared_mtg.get_vertex_property(mtg_element_vid)
                             if np.nan_to_num(self._shared_mtg.property('length').get(mtg_element_vid, 0)) == 0:
                                 continue
