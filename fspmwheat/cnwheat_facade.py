@@ -259,7 +259,7 @@ class CNWheatFacade(object):
                         mtg_organ_properties = mtg_axis_properties[mtg_organ_label]
                         access_mtg_names = cnwheat_simulation.Simulation.ORGANS_STATE
                         if cnwheat_organ_class == cnwheat_model.Roots and self.isolated_roots:
-                            access_mtg_names += cnwheat_simulation.Simulation.ORGANS_FLUXES[:3]
+                            access_mtg_names += cnwheat_simulation.Simulation.ORGANS_FLUXES[:3] + ["Unloading_Sucrose", "Unloading_Amino_Acids"]
                         cnwheat_organ_data_names = set(access_mtg_names).intersection(cnwheat_organ.__dict__)
 
                         if set(mtg_organ_properties).issuperset(cnwheat_organ_data_names):

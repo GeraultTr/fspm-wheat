@@ -35,7 +35,13 @@ class WheatFSPM(Model):
     Export_Nitrates: float = declare(default=0., unit="umol.h-1", unit_comment="of nitrate",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
-    Export_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids",
+    Export_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of N",
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
+    Unloading_Sucrose_phloem: float = declare(default=0.1, unit="umol.h-1", unit_comment="of C",
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
+    Unloading_Amino_Acids_phloem: float = declare(default=0.1, unit="umol.h-1", unit_comment="of C",
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="input", by="root_nitrogen", state_variable_type="extensive", edit_by="user")
     sucrose: float = declare(default=0., unit="umol of C", unit_comment="amount in equivalent C",
@@ -52,10 +58,19 @@ class WheatFSPM(Model):
     Total_Transpiration: float = declare(default=0., unit="mmol.s-1", unit_comment="of water", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Unloading_Sucrose: float = declare(default=0., unit="umol.h-1", unit_comment="of equivalent C mol? sucrose",
+    mstruct_axis: float = declare(default=0.05, unit="g", unit_comment="of axis structural mass", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
-    Unloading_Amino_Acids: float = declare(default=0., unit="umol.h-1", unit_comment="of amino acids", 
+    sucrose_phloem: float = declare(default=10., unit="µmol", unit_comment="of C", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    amino_acids_phloem: float = declare(default=1, unit="µmol", unit_comment="of N", 
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    Unloading_Sucrose: float = declare(default=30., unit="umol.h-1", unit_comment="of equivalent C mol? sucrose",
+                                        min_value="", max_value="", description="", value_comment="", references="", DOI="",
+                                        variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
+    Unloading_Amino_Acids: float = declare(default=1., unit="umol.h-1", unit_comment="of amino acids", 
                                         min_value="", max_value="", description="", value_comment="", references="", DOI="",
                                         variable_type="state_variable", by="model_shoot", state_variable_type="extensive", edit_by="user")
     Export_cytokinins: float = declare(default=0., unit="AU.h-1", unit_comment="of cytokinins",
@@ -332,9 +347,12 @@ class WheatFSPM(Model):
         self.cn_wheat_root_props = self.g.get_vertex_property(2)["roots"]
 
         # TODO : Temporary
-        self.cn_wheat_root_props["Unloading_Sucrose"] = 30.
-        self.cn_wheat_root_props["Unloading_Amino_Acids"] = 1.
-        self.g.properties()["Total_Transpiration"][2] = 0.
+        self.cn_wheat_root_props["Unloading_Sucrose"] = self.props["Unloading_Sucrose"][1]
+        self.cn_wheat_root_props["Unloading_Amino_Acids"] = self.props["Unloading_Amino_Acids"][1]
+        self.g.properties()["Total_Transpiration"][2] = self.props["Total_Transpiration"][1]
+
+        self.g.get_vertex_property(2)['phloem']['sucrose'] = self.props["sucrose_phloem"][1]
+        self.g.get_vertex_property(2)['phloem']['amino_acids'] = self.props["amino_acids_phloem"][1]
 
         
         if self.synchronize_adventitious_emergence:
@@ -362,7 +380,7 @@ class WheatFSPM(Model):
                     # Fourth less likely nodal on this node
                     elif np.random.random() < 0.2:
                         nodal_emergence_delays.append(remaining_time_to_emergence + (100 / 20) * 24 * 3600 )
-                    
+            
             self.props["adventitious_to_emerge"].update({1: nodal_emergence_delays})
 
         self.sync_shoot_outputs_with_root_mtg()
@@ -370,7 +388,14 @@ class WheatFSPM(Model):
 
     def sync_shoot_inputs_with_shoot_mtg(self):
         for name in self.inputs:
-            self.cn_wheat_root_props[name] = self.props[name][1]
+            if name == "Unloading_Sucrose_phloem":
+                self.cn_wheat_root_props["Unloading_Sucrose"] = self.props[name][1]
+
+            elif name == "Unloading_Amino_Acids_phloem":
+                self.cn_wheat_root_props["Unloading_Amino_Acids"] = self.props[name][1]
+
+            else:
+                self.cn_wheat_root_props[name] = self.props[name][1]
 
     def sync_shoot_outputs_with_root_mtg(self):
         # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
@@ -378,6 +403,15 @@ class WheatFSPM(Model):
         for name in self.state_variables:
             if name == "Total_Transpiration":
                 self.props[name].update({1: self.g.get_vertex_property(2)[name]})
+
+            elif name == "mstruct_axis":
+                self.props[name].update({1: self.g.get_vertex_property(2)['mstruct']})
+
+            elif name == "amino_acids_phloem":
+                self.props[name].update({1: self.g.get_vertex_property(2)['phloem']['amino_acids']})
+
+            elif name == "sucrose_phloem":
+                self.props[name].update({1: self.g.get_vertex_property(2)['phloem']['sucrose']})
 
             elif name == "adventitious_to_emerge" and self.synchronize_adventitious_emergence:
                 hiddenzones = self.g.vertices(scale=3)
