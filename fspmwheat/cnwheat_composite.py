@@ -398,7 +398,7 @@ class WheatFSPM(Model):
                 self.cn_wheat_root_props[name] = self.props[name][1]
 
     def sync_shoot_outputs_with_root_mtg(self):
-        # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models here.
+        # Link this specific data structure to self for variables exchange, only for outputs that will be read by other models  here.
         # Note : here eval is necessary to ensure intended lambda function definition
         for name in self.state_variables:
             if name == "Total_Transpiration":
